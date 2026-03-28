@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calculadora de IMC</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      background: #0f1623;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      overflow-x: hidden;
+      color: #2d3748;
+    }
+
+    .bg-blobs { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.35;
+      animation: float 10s ease-in-out infinite alternate;
+    }
+    .blob-1 { width: 500px; height: 500px; background: #6c63ff; top: -150px; left: -150px; animation-delay: 0s; }
+    .blob-2 { width: 400px; height: 400px; background: #38bdf8; bottom: -120px; right: -100px; animation-delay: -4s; }
+    .blob-3 { width: 300px; height: 300px; background: #f472b6; top: 40%; left: 55%; animation-delay: -7s; }
+
+    @keyframes float {
+      from { transform: translateY(0) scale(1); }
+      to   { transform: translateY(-30px) scale(1.06); }
+    }
+
+    .container { position: relative; z-index: 1; width: 100%; max-width: 480px; }
+
+    .glass-card {
+      background: rgba(255,255,255,0.97);
+      border-radius: 28px;
+      padding: 36px 32px 28px;
+      box-shadow:
+        0 2px 4px rgba(0,0,0,0.06),
+        0 8px 32px rgba(0,0,0,0.18),
+        0 0 0 1px rgba(255,255,255,0.4);
+    }
+
+    .header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
+    .icon-wrap {
+      width: 52px; height: 52px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #6c63ff, #48bb78);
+      display: flex; align-items: center; justify-content: center;
+      color: white; flex-shrink: 0;
+      box-shadow: 0 4px 14px rgba(108,99,255,0.4);
+    }
+    h1 { font-size: 1.35rem; font-weight: 800; color: #1a202c; line-height: 1.2; }
+    .subtitle { font-size: 0.78rem; color: #a0aec0; font-weight: 500; margin-top: 2px; }
+
+    .inputs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+    .input-group label {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.78rem; font-weight: 600; color: #718096;
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+    }
+    .input-wrap {
+      display: flex; align-items: center;
+      background: #f7fafc; border: 2px solid #e2e8f0;
+      border-radius: 12px; overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .input-wrap:focus-within {
+      border-color: #6c63ff;
+      box-shadow: 0 0 0 3px rgba(108,99,255,0.15);
+      background: #fff;
+    }
+    input[type="number"] {
+      flex: 1; border: none; background: transparent;
+      padding: 11px 12px; font-size: 1.05rem; font-weight: 700;
+      color: #1a202c; outline: none; width: 100%;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .unit {
+      padding: 0 12px; font-size: 0.8rem; font-weight: 700; color: #a0aec0;
+      border-left: 1px solid #e2e8f0; background: #f0f4f8;
+      height: 100%; display: flex; align-items: center;
+    }
+
+    .slider-group { display: flex; flex-direction: column; gap: 14px; margin-bottom: 22px; }
+    .slider-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; font-size: 0.82rem; font-weight: 600; color: #4a5568;
+    }
+    .slider-badge {
+      background: #edf2ff; color: #6c63ff;
+      font-size: 0.78rem; font-weight: 700;
+      padding: 2px 10px; border-radius: 20px;
+    }
+    .slider {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 6px; border-radius: 99px;
+      background: #e2e8f0; outline: none; cursor: pointer;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+      background: linear-gradient(135deg, #6c63ff, #48bb78);
+      box-shadow: 0 2px 8px rgba(108,99,255,0.45);
+      cursor: pointer; transition: transform 0.15s;
+    }
+    .slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+    .slider::-moz-range-thumb {
+      width: 20px; height: 20px; border-radius: 50%; border: none;
+      background: linear-gradient(135deg, #6c63ff, #48bb78);
+      box-shadow: 0 2px 8px rgba(108,99,255,0.45); cursor: pointer;
+    }
+
+    .btn-calc {
+      width: 100%; padding: 15px;
+      background: linear-gradient(135deg, #6c63ff 0%, #48bb78 100%);
+      color: white; border: none; border-radius: 14px;
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      letter-spacing: 0.02em;
+      box-shadow: 0 4px 18px rgba(108,99,255,0.4);
+      transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+    }
+    .btn-calc:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(108,99,255,0.45); }
+    .btn-calc:active { transform: translateY(0); filter: brightness(0.95); }
+
+    .result-card {
+      margin-top: 22px; border-radius: 18px; overflow: hidden;
+      max-height: 0; opacity: 0;
+      transition: max-height 0.6s ease, opacity 0.4s ease;
+    }
+    .result-card.visible { max-height: 400px; opacity: 1; }
+    .result-inner {
+      background: linear-gradient(160deg, #f8f9ff 0%, #f0fff6 100%);
+      border: 2px solid #e9ecef; border-radius: 18px;
+      padding: 24px 20px 20px; text-align: center;
+    }
+
+    .gauge-wrap { display: flex; justify-content: center; margin-bottom: 8px; }
+    .result-value-wrap { margin-bottom: 8px; }
+    .imc-number { font-size: 3.2rem; font-weight: 800; color: #1a202c; line-height: 1; }
+    .imc-badge {
+      display: inline-block; margin-top: 6px;
+      padding: 4px 18px; border-radius: 99px;
+      font-size: 0.85rem; font-weight: 700;
+      background: #c6f6d5; color: #276749;
+      transition: background 0.5s, color 0.5s;
+    }
+    .imc-desc { font-size: 0.82rem; color: #718096; margin: 10px 0 16px; line-height: 1.5; }
+
+    .mini-stats {
+      display: flex; justify-content: center; align-items: center;
+      background: white; border-radius: 12px;
+      border: 1px solid #e2e8f0; overflow: hidden;
+    }
+    .mini-stat {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; padding: 12px 8px; gap: 3px;
+    }
+    .mini-label { font-size: 0.72rem; color: #a0aec0; font-weight: 500; }
+    .mini-val { font-size: 1rem; font-weight: 700; color: #2d3748; }
+    .mini-divider { width: 1px; height: 40px; background: #e2e8f0; flex-shrink: 0; }
+
+    .table-section { margin-top: 22px; }
+    .table-title {
+      font-size: 0.72rem; font-weight: 700; color: #a0aec0;
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px;
+    }
+    .table-list { display: flex; flex-direction: column; gap: 5px; }
+    .table-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 10px;
+      background: #f7fafc; border: 1.5px solid transparent;
+      transition: border-color 0.3s, background 0.3s, transform 0.2s;
+      font-size: 0.85rem;
+    }
+    .table-row.active {
+      background: #fff; border-color: #6c63ff;
+      transform: translateX(4px);
+      box-shadow: 0 2px 10px rgba(108,99,255,0.12);
+    }
+    .cat-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    .cat-name { flex: 1; font-weight: 600; color: #4a5568; }
+    .table-row.active .cat-name { color: #1a202c; }
+    .cat-range { font-size: 0.78rem; color: #a0aec0; font-weight: 500; }
+    .table-row.active .cat-range { color: #6c63ff; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <main class="container">
+    <div class="glass-card">
+
+      <div class="header">
+        <div class="icon-wrap">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Calculadora de IMC</h1>
+          <p class="subtitle">Índice de Massa Corporal · OMS</p>
+        </div>
+      </div>
+
+      <div class="inputs-grid">
+        <div class="input-group">
+          <label for="peso">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            Peso
+          </label>
+          <div class="input-wrap">
+            <input type="number" id="peso" placeholder="70" min="1" max="500" step="0.1" />
+            <span class="unit">kg</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="altura">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V2M2 12h20"/></svg>
+            Altura
+          </label>
+          <div class="input-wrap">
+            <input type="number" id="altura" placeholder="175" min="50" max="300" />
+            <span class="unit">cm</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-item">
+          <div class="slider-header">
+            <span>Peso</span>
+            <span id="peso-val" class="slider-badge">70 kg</span>
+          </div>
+          <input type="range" id="slider-peso" min="30" max="200" value="70" step="0.5" class="slider" />
+        </div>
+        <div class="slider-item">
+          <div class="slider-header">
+            <span>Altura</span>
+            <span id="altura-val" class="slider-badge">175 cm</span>
+          </div>
+          <input type="range" id="slider-altura" min="100" max="220" value="175" class="slider" />
+        </div>
+      </div>
+
+      <button class="btn-calc" id="btn-calc" onclick="calcular()">
+        <span>Calcular IMC</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+
+      <div class="result-card" id="result">
+        <div class="result-inner">
+          <div class="gauge-wrap">
+            <svg viewBox="0 0 200 120" width="200" height="120">
+              <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/>
+              <path id="gauge-fill" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#48bb78" stroke-width="14" stroke-linecap="round"
+                stroke-dasharray="251.2" stroke-dashoffset="251.2" style="transition:stroke-dashoffset 1s ease,stroke 0.5s ease"/>
+              <line id="gauge-needle" x1="100" y1="100" x2="100" y2="30" stroke="#2d3748" stroke-width="3" stroke-linecap="round"
+                style="transform-origin:100px 100px;transform:rotate(0deg);transition:transform 1s ease"/>
+              <circle cx="100" cy="100" r="7" fill="#2d3748"/>
+            </svg>
+          </div>
+          <div class="result-value-wrap">
+            <div class="imc-number" id="imc-number">--</div>
+            <div class="imc-badge" id="imc-badge">--</div>
+          </div>
+          <p class="imc-desc" id="imc-desc"></p>
+          <div class="mini-stats">
+            <div class="mini-stat">
+              <span class="mini-label">Peso ideal (mín)</span>
+              <span class="mini-val" id="peso-min">--</span>
+            </div>
+            <div class="mini-divider"></div>
+            <div class="mini-stat">
+              <span class="mini-label">Peso ideal (máx)</span>
+              <span class="mini-val" id="peso-max">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-section">
+        <p class="table-title">Classificação OMS</p>
+        <div class="table-list">
+          <div class="table-row" data-cat="0"><span class="cat-dot" style="background:#63b3ed"></span><span class="cat-name">Abaixo do peso</span><span class="cat-range">&lt; 18,5</span></div>
+          <div class="table-row" data-cat="1"><span class="cat-dot" style="background:#48bb78"></span><span class="cat-name">Peso normal</span><span class="cat-range">18,5 – 24,9</span></div>
+          <div class="table-row" data-cat="2"><span class="cat-dot" style="background:#f6ad55"></span><span class="cat-name">Sobrepeso</span><span class="cat-range">25,0 – 29,9</span></div>
+          <div class="table-row" data-cat="3"><span class="cat-dot" style="background:#fc8181"></span><span class="cat-name">Obesidade I</span><span class="cat-range">30,0 – 34,9</span></div>
+          <div class="table-row" data-cat="4"><span class="cat-dot" style="background:#f56565"></span><span class="cat-name">Obesidade II</span><span class="cat-range">35,0 – 39,9</span></div>
+          <div class="table-row" data-cat="5"><span class="cat-dot" style="background:#e53e3e"></span><span class="cat-name">Obesidade III</span><span class="cat-range">&ge; 40,0</span></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const categorias = [
+      { cat:0, label:'Abaixo do peso',   desc:'Seu peso está abaixo do recomendado. Consulte um nutricionista.',            badge:{bg:'#ebf8ff',text:'#2b6cb0'}, gaugeColor:'#63b3ed', needleDeg:-80, dashOffset:220 },
+      { cat:1, label:'Peso normal',       desc:'Parabéns! Você está na faixa de peso ideal para sua altura.',               badge:{bg:'#c6f6d5',text:'#276749'}, gaugeColor:'#48bb78', needleDeg:-30, dashOffset:150 },
+      { cat:2, label:'Sobrepeso',         desc:'Atenção aos hábitos alimentares e à prática de exercícios físicos.',        badge:{bg:'#fefcbf',text:'#975a16'}, gaugeColor:'#f6ad55', needleDeg:10,  dashOffset:90  },
+      { cat:3, label:'Obesidade grau I',  desc:'Recomenda-se acompanhamento médico e mudanças no estilo de vida.',          badge:{bg:'#fff5f5',text:'#c53030'}, gaugeColor:'#fc8181', needleDeg:40,  dashOffset:50  },
+      { cat:4, label:'Obesidade grau II', desc:'Procure orientação médica especializada para tratamento adequado.',         badge:{bg:'#fff5f5',text:'#9b2c2c'}, gaugeColor:'#f56565', needleDeg:65,  dashOffset:20  },
+      { cat:5, label:'Obesidade grau III',desc:'Situação crítica. Busque atendimento médico com urgência.',                 badge:{bg:'#fff5f5',text:'#742a2a'}, gaugeColor:'#e53e3e', needleDeg:80,  dashOffset:5   },
+    ];
+
+    function getCategoria(imc) {
+      if (imc < 18.5) return categorias[0];
+      if (imc < 25)   return categorias[1];
+      if (imc < 30)   return categorias[2];
+      if (imc < 35)   return categorias[3];
+      if (imc < 40)   return categorias[4];
+      return               categorias[5];
+    }
+
+    function syncPeso(val) {
+      document.getElementById('peso').value = val;
+      document.getElementById('slider-peso').value = val;
+      document.getElementById('peso-val').textContent = val + ' kg';
+    }
+    function syncAltura(val) {
+      document.getElementById('altura').value = val;
+      document.getElementById('slider-altura').value = val;
+      document.getElementById('altura-val').textContent = val + ' cm';
+    }
+
+    document.getElementById('peso').addEventListener('input', e => syncPeso(e.target.value));
+    document.getElementById('altura').addEventListener('input', e => syncAltura(e.target.value));
+    document.getElementById('slider-peso').addEventListener('input', e => syncPeso(e.target.value));
+    document.getElementById('slider-altura').addEventListener('input', e => syncAltura(e.target.value));
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') calcular(); });
+
+    function calcular() {
+      const peso     = parseFloat(document.getElementById('peso').value);
+      const alturaCm = parseFloat(document.getElementById('altura').value);
+
+      if (!peso || !alturaCm || peso <= 0 || alturaCm <= 0) {
+        shake(document.getElementById('btn-calc'));
+        return;
+      }
+
+      const altura  = alturaCm / 100;
+      const imc     = peso / (altura * altura);
+      const cat     = getCategoria(imc);
+      const pesoMin = (18.5 * altura * altura).toFixed(1);
+      const pesoMax = (24.9 * altura * altura).toFixed(1);
+
+      document.getElementById('imc-number').textContent = imc.toFixed(1);
+
+      const badge = document.getElementById('imc-badge');
+      badge.textContent      = cat.label;
+      badge.style.background = cat.badge.bg;
+      badge.style.color      = cat.badge.text;
+
+      document.getElementById('imc-desc').textContent = cat.desc;
+      document.getElementById('peso-min').textContent = pesoMin + ' kg';
+      document.getElementById('peso-max').textContent = pesoMax + ' kg';
+
+      document.getElementById('gauge-fill').style.stroke           = cat.gaugeColor;
+      document.getElementById('gauge-fill').style.strokeDashoffset = cat.dashOffset;
+      document.getElementById('gauge-needle').style.transform      = `rotate(${cat.needleDeg}deg)`;
+
+      document.querySelectorAll('.table-row').forEach(row => {
+        row.classList.toggle('active', parseInt(row.dataset.cat) === cat.cat);
+      });
+
+      document.getElementById('result').classList.add('visible');
+      animateNumber('imc-number', imc);
+    }
+
+    function animateNumber(id, target) {
+      const el        = document.getElementById(id);
+      const start     = parseFloat(el.textContent) || 0;
+      const startTime = performance.now();
+      (function update(now) {
+        const p = Math.min((now - startTime) / 800, 1);
+        el.textContent = (start + (target - start) * (1 - Math.pow(1 - p, 3))).toFixed(1);
+        if (p < 1) requestAnimationFrame(update);
+      })(performance.now());
+    }
+
+    function shake(el) {
+      [[-6,0],[6,80],[-4,160],[4,240],['',320]].forEach(([x,t]) =>
+        setTimeout(() => { el.style.transform = x ? `translateX(${x}px)` : ''; }, t)
+      );
+    }
+  </script>
+</body>
+</html>
