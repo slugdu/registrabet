@@ -17,7 +17,13 @@ if (!window.supabase) {
     '⚠️ Falha ao carregar o SDK do Supabase.<br>Verifique sua conexão e recarregue a página.</p>';
   throw new Error('[Registrabet] window.supabase não está definido — CDN falhou ao carregar.');
 }
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    detectSessionFromUrl: true, // processa tokens da URL automaticamente (#access_token / ?code=)
+    persistSession:       true, // mantém a sessão no localStorage entre recargas
+    autoRefreshToken:     true  // renova o token antes de expirar
+  }
+});
 
 // ── Diagnóstico — rode no console do navegador: await debugSupabase()
 window.debugSupabase = async function() {
@@ -438,23 +444,43 @@ async function loadBetsFromCloud(userId) {
   return true;
 }
 
+// ---- Boot do app para usuário autenticado ----
+// Centraliza o fluxo usado por INITIAL_SESSION, SIGNED_IN e USER_UPDATED.
+// Evita duplicação e garante que o app só renderize com dados prontos.
+
+async function _bootUser(user) {
+  // Evita re-boot se já estiver rodando para o mesmo usuário
+  if (currentUser?.id === user.id && appInitialized) {
+    refreshCurrent();
+    return;
+  }
+
+  currentUser = user;
+  showAppChrome();
+
+  // Exibe/mantém o splash enquanto sincroniza — sem flash de tela vazia
+  document.getElementById('auth-splash')?.classList.remove('hidden');
+  hideAuthScreen();
+
+  await loadBetsFromCloud(user.id);
+
+  if (!appInitialized) { initApp(); appInitialized = true; }
+  else refreshCurrent();
+
+  hideSplash();
+}
+
 // ---- Inicialização da camada de auth ----
-// Substitui initApp como handler do DOMContentLoaded.
-// onAuthStateChange garante que initApp só rode após confirmação de sessão.
 
 function initAuth() {
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    console.log('[Auth]', event, session?.user?.email ?? '—');
 
-    // INITIAL_SESSION: dispara uma vez ao carregar a página com o estado atual.
+    // INITIAL_SESSION: estado atual ao carregar a página.
+    // Captura tokens de URL (confirmação de e-mail, magic link, recovery).
     if (event === 'INITIAL_SESSION') {
       if (session?.user) {
-        currentUser = session.user;
-        showAppChrome();
-        // Splash permanece visível durante o load — sem flash de tela vazia
-        await loadBetsFromCloud(session.user.id);
-        if (!appInitialized) { initApp(); appInitialized = true; }
-        else refreshCurrent();
-        hideSplash();
+        await _bootUser(session.user);
       } else {
         hideSplash();
         showAuthScreen();
@@ -462,36 +488,35 @@ function initAuth() {
       return;
     }
 
-    // SIGNED_IN: novo login bem-sucedido.
-    // Re-exibe o splash durante o load para evitar flash de app vazio.
+    // SIGNED_IN: login manual ou redirect de confirmação de e-mail.
     if (event === 'SIGNED_IN') {
-      currentUser = session.user;
-      showAppChrome();
-
-      // Mantém / re-exibe o splash enquanto sincroniza
-      const splash = document.getElementById('auth-splash');
-      if (splash) { splash.classList.remove('hidden'); }
-
-      // Esconde auth screen APÓS garantir que o splash está visível
-      hideAuthScreen();
-
-      // Passo A: aguarda merge completo com confirmação de localStorage atualizado
-      await loadBetsFromCloud(session.user.id);
-
-      // Passo B: inicializa ou re-renderiza com os dados frescos
-      if (!appInitialized) { initApp(); appInitialized = true; }
-      else refreshCurrent();
-
-      // Passo C: remove o splash somente após o render
-      hideSplash();
-
-      checkMigration(session.user.id);
+      if (session?.user) {
+        await _bootUser(session.user);
+        checkMigration(session.user.id);
+      }
       return;
     }
 
-    // SIGNED_OUT: logout ou sessão expirada
+    // USER_UPDATED: disparado pelo Supabase em alguns fluxos de confirmação
+    // de e-mail no lugar de SIGNED_IN — precisamos tratar igualmente.
+    if (event === 'USER_UPDATED') {
+      if (session?.user) {
+        await _bootUser(session.user);
+        checkMigration(session.user.id);
+      }
+      return;
+    }
+
+    // TOKEN_REFRESHED: renovação silenciosa do token — apenas atualiza referência.
+    if (event === 'TOKEN_REFRESHED') {
+      if (session?.user) currentUser = session.user;
+      return;
+    }
+
+    // SIGNED_OUT: logout ou sessão expirada.
     if (event === 'SIGNED_OUT') {
       currentUser = null;
+      appInitialized = false; // permite re-inicializar no próximo login
       hideAppChrome();
       showAuthScreen();
       return;
