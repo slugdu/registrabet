@@ -1,4 +1,5 @@
-// ============================================================
+// teste xls deploy123
+// // ============================================================
 // REGISTRABET — Plataforma de Gestão de Banca Profissional
 // Stack: Vanilla JS ES6+, Chart.js 4, LocalStorage
 // v2.0 — Evolução com BI, Estratégias, Money Line, Filtros
