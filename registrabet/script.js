@@ -687,7 +687,25 @@ const DB = {
     return bets[i];
   },
 
-  deleteBet(id) {
+  async deleteBet(id) {
+    const bet = this.getBets().find(b => b.id === id);
+
+    // Remove do Supabase se a aposta tiver supabase_id e houver usuário logado
+    if (bet?.supabase_id && currentUser) {
+      const { error } = await supabaseClient
+        .from('bets')
+        .delete()
+        .eq('id', bet.supabase_id)
+        .eq('user_id', currentUser.id);
+
+      if (error) {
+        console.error('[Cloud] Erro ao deletar aposta:', error);
+        throw error; // propaga para o caller fazer rollback
+      }
+      console.log('[Cloud] Aposta deletada do Supabase:', bet.supabase_id);
+    }
+
+    // Só remove do localStorage após sucesso no Supabase (ou se era só local)
     this.saveBets(this.getBets().filter(b => b.id !== id));
   },
 
@@ -1755,13 +1773,25 @@ function submitForm(e) {
   refreshCurrent();
 }
 
-function confirmDelete(id) {
+async function confirmDelete(id) {
   const bet = DB.getBets().find(b => b.id === id);
   if (!bet) return;
   if (!confirm(`Excluir "${getEventDisplay(bet)}"?\nEsta ação não pode ser desfeita.`)) return;
-  DB.deleteBet(id);
-  toast('Aposta excluída.', 'info');
+
+  // Optimistic UI: remove imediatamente da tela
+  const backup = DB.getBets();
+  DB.saveBets(backup.filter(b => b.id !== id));
   refreshCurrent();
+
+  try {
+    await DB.deleteBet(id);
+    toast('Aposta excluída.', 'info');
+  } catch {
+    // Rollback: restaura os dados e avisa o usuário
+    DB.saveBets(backup);
+    refreshCurrent();
+    toast('Erro ao excluir. Tente novamente.', 'error');
+  }
 }
 
 // ============================================================
@@ -2185,6 +2215,12 @@ function initApp() {
   new AutocompleteInput(document.getElementById('f-homeTeam'), [],       { getExtra: () => [...new Set(DB.getBets().flatMap(b => [b.homeTeam, b.awayTeam]).filter(Boolean))], maxItems: 10 });
   new AutocompleteInput(document.getElementById('f-awayTeam'), [],       { getExtra: () => [...new Set(DB.getBets().flatMap(b => [b.homeTeam, b.awayTeam]).filter(Boolean))], maxItems: 10 });
   new AutocompleteInput(document.getElementById('f-market'),   MARKETS,  { getExtra: () => [...new Set(DB.getBets().map(b => b.market).filter(Boolean))] });
+
+  // Sync entre abas: quando outra aba salva/deleta no localStorage,
+  // atualiza a UI desta aba automaticamente
+  window.addEventListener('storage', e => {
+    if (e.key === STORAGE_KEY) refreshCurrent();
+  });
 
   lucide.createIcons();
   showSection('dashboard');
