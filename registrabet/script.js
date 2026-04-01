@@ -53,7 +53,7 @@ window.debugSupabase = async function() {
     console.log('📋 Amostra (3 primeiros):', data);
   }
 
-  console.log('💾 localStorage tem', JSON.parse(localStorage.getItem('bettrack_v1') || '[]').length, 'aposta(s)');
+  console.log('💾 localStorage tem', DB.getBets().length, `aposta(s) (chave: ${STORAGE_KEY})`);
   console.groupEnd();
 };
 
@@ -456,6 +456,10 @@ async function _bootUser(user) {
     return;
   }
 
+  // Define a chave do localStorage ANTES de qualquer acesso ao DB
+  // Garante que cada usuário leia/escreva apenas seus próprios dados
+  setStorageKey(user.id);
+
   currentUser = user;
   showAppChrome();
 
@@ -516,6 +520,10 @@ function initAuth() {
 
     // SIGNED_OUT: logout ou sessão expirada.
     if (event === 'SIGNED_OUT') {
+      // Limpa os dados locais do usuário que saiu
+      localStorage.removeItem(STORAGE_KEY);
+      // Reseta a chave para o fallback genérico (inerte até o próximo login)
+      STORAGE_KEY = 'bettrack_v1';
       currentUser = null;
       appInitialized = false; // permite re-inicializar no próximo login
       hideAppChrome();
@@ -529,8 +537,14 @@ function initAuth() {
 // CONSTANTS
 // ============================================================
 
-const STORAGE_KEY  = 'bettrack_v1';       // mantém retrocompat com dados existentes
+// STORAGE_KEY é dinâmico por usuário — definido em _bootUser via setStorageKey()
+// Fallback 'bettrack_v1' usado apenas fora do contexto autenticado (nunca lido em produção)
+let   STORAGE_KEY  = 'bettrack_v1';
 const SETTINGS_KEY = 'registrabet_settings'; // chave separada — não afetada ao limpar apostas
+
+function setStorageKey(userId) {
+  STORAGE_KEY = `bets_${userId}`;
+}
 
 // Configurações persistentes (banca, preferências)
 const Settings = {
