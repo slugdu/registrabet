@@ -687,9 +687,8 @@ const DB = {
     return bets[i];
   },
 
-  async deleteBet(id) {
-    const bet = this.getBets().find(b => b.id === id);
-
+  // bet: objeto completo da aposta (deve ser passado pelo caller ANTES do optimistic removal)
+  async deleteBet(bet) {
     // Remove do Supabase se a aposta tiver supabase_id e houver usuário logado
     if (bet?.supabase_id && currentUser) {
       const { error } = await supabaseClient
@@ -705,8 +704,8 @@ const DB = {
       console.log('[Cloud] Aposta deletada do Supabase:', bet.supabase_id);
     }
 
-    // Só remove do localStorage após sucesso no Supabase (ou se era só local)
-    this.saveBets(this.getBets().filter(b => b.id !== id));
+    // Remove do localStorage (idempotente — ok se já foi removido no optimistic)
+    this.saveBets(this.getBets().filter(b => b.id !== bet.id));
   },
 
   clear() { localStorage.removeItem(STORAGE_KEY); }
@@ -1774,6 +1773,7 @@ function submitForm(e) {
 }
 
 async function confirmDelete(id) {
+  // Captura o objeto ANTES de qualquer remoção — necessário para ter o supabase_id
   const bet = DB.getBets().find(b => b.id === id);
   if (!bet) return;
   if (!confirm(`Excluir "${getEventDisplay(bet)}"?\nEsta ação não pode ser desfeita.`)) return;
@@ -1784,7 +1784,8 @@ async function confirmDelete(id) {
   refreshCurrent();
 
   try {
-    await DB.deleteBet(id);
+    // Passa o objeto bet (já capturado acima), não o id — evita busca após remoção
+    await DB.deleteBet(bet);
     toast('Aposta excluída.', 'info');
   } catch {
     // Rollback: restaura os dados e avisa o usuário
