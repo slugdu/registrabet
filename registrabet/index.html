@@ -225,7 +225,12 @@
           <div class="flex items-center gap-2 mb-4">
             <i data-lucide="trending-up" class="w-4 h-4 text-emerald-500"></i>
             <h3 class="text-sm font-semibold text-slate-300">Money Line · Evolução da Banca</h3>
-            <span class="ml-auto text-[10px] text-slate-700 border border-slate-800 rounded px-1.5 py-0.5">🟢 acima 0 · 🔴 abaixo 0</span>
+            <span class="hidden sm:inline ml-auto text-[10px] text-slate-700 border border-slate-800 rounded px-1.5 py-0.5">🟢 acima 0 · 🔴 abaixo 0</span>
+            <select id="marketFilter"
+              onchange="renderMarketChart(this.value)"
+              class="ml-auto sm:ml-2 bg-slate-800 border border-slate-700/60 text-slate-400 text-[11px] rounded-lg px-2 py-1 focus:outline-none focus:border-emerald-600/60 cursor-pointer hover:border-slate-600 transition-colors">
+              <option value="">Todos os Mercados</option>
+            </select>
           </div>
           <div class="chart-wrap h-48"><canvas id="chart-bank"></canvas></div>
         </div>

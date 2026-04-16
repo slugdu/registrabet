@@ -1185,6 +1185,91 @@ const Charts = {
     });
   },
 
+  // Reconstrói o gráfico de evolução filtrando por mercado.
+  // market === '' → exibe todos. Reutiliza o mesmo canvas/instância 'bank'.
+  marketEvolution(bets, market) {
+    const canvasId = 'chart-bank';
+    const wrapper  = document.getElementById(canvasId)?.parentElement;
+    this.destroy('bank');
+
+    const filtered = market
+      ? bets.filter(b => b.market === market)
+      : bets;
+
+    const data = Calc.bankEvolution(filtered);
+
+    if (data.length <= 1) {
+      if (wrapper) wrapper.innerHTML = this._empty(
+        market ? `Sem dados para "${market}"` : 'Registre apostas para ver a evolução da banca'
+      );
+      return;
+    }
+
+    if (!document.getElementById(canvasId)) {
+      const c = document.createElement('canvas'); c.id = canvasId;
+      wrapper.innerHTML = ''; wrapper.appendChild(c);
+    }
+
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    const d   = this.defaults();
+
+    const moneyLineGradient = {
+      id: 'moneyLineGradient',
+      afterLayout(chart) {
+        const { ctx: c, chartArea, scales: { y } } = chart;
+        if (!chartArea) return;
+        const { top, bottom } = chartArea;
+        const h = bottom - top;
+        if (h <= 0) return;
+        const zeroY = Math.max(top, Math.min(bottom, y.getPixelForValue(0)));
+        const ratio = (zeroY - top) / h;
+        const grad  = c.createLinearGradient(0, top, 0, bottom);
+        grad.addColorStop(0,                          'rgba(16,185,129,0.22)');
+        grad.addColorStop(Math.max(0, ratio - 0.001), 'rgba(16,185,129,0.04)');
+        if (ratio < 1) {
+          grad.addColorStop(ratio, 'rgba(239,68,68,0.04)');
+          grad.addColorStop(1,     'rgba(239,68,68,0.22)');
+        }
+        chart.data.datasets[0].backgroundColor = grad;
+      }
+    };
+
+    this.instances['bank'] = new Chart(ctx, {
+      type: 'line',
+      plugins: [moneyLineGradient],
+      data: {
+        labels: data.map(d => d.label),
+        datasets: [{
+          data: data.map(d => d.value),
+          backgroundColor: 'rgba(16,185,129,0.08)',
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.4,
+          pointRadius:      data.length > 30 ? 0 : 3,
+          pointHoverRadius: 6,
+          segment: {
+            borderColor:          ctx => ctx.p1.parsed.y >= 0 ? '#10b981' : '#ef4444',
+            pointBackgroundColor: ctx => ctx.p1.parsed.y >= 0 ? '#10b981' : '#ef4444',
+          }
+        }]
+      },
+      options: {
+        ...d,
+        plugins: {
+          ...d.plugins,
+          tooltip: { ...d.plugins.tooltip, callbacks: { label: ctx => `Profit: ${fmtProfit(ctx.parsed.y)}` } }
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            grid: { color: 'rgba(30,58,95,0.5)' },
+            ticks: { color: '#64748b', callback: v => fmtMini(v) }
+          }
+        }
+      }
+    });
+  },
+
   drawdown(bets) {
     const canvasId = 'chart-drawdown';
     const wrapper  = document.getElementById(canvasId)?.parentElement;
@@ -1383,10 +1468,26 @@ function renderDashboard() {
   ).join('');
 
   requestAnimationFrame(() => {
-    Charts.bankEvolution(bets);
+    // Popula o select com os mercados únicos do usuário
+    const sel = document.getElementById('marketFilter');
+    if (sel) {
+      const current = sel.value; // preserva seleção anterior ao re-renderizar
+      const markets = [...new Set(DB.getBets().map(b => b.market).filter(Boolean))].sort();
+      sel.innerHTML = '<option value="">Todos os Mercados</option>'
+        + markets.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${m}</option>`).join('');
+    }
+    // Renderiza o gráfico respeitando o mercado selecionado (ou todos)
+    Charts.marketEvolution(bets, sel?.value ?? '');
     Charts.drawdown(bets);
     lucide.createIcons();
   });
+}
+
+// Chamada pelo onchange do select#marketFilter
+// Reconstrói instantaneamente o gráfico para o mercado escolhido.
+function renderMarketChart(market) {
+  const bets = activeBets();
+  requestAnimationFrame(() => Charts.marketEvolution(bets, market));
 }
 
 function setKPI(id, label, value, color, icon, sub) {
@@ -2250,9 +2351,15 @@ function initApp() {
   new AutocompleteInput(document.getElementById('f-market'),   MARKETS,  { getExtra: () => [...new Set(DB.getBets().map(b => b.market).filter(Boolean))] });
 
   // Sync entre abas: quando outra aba salva/deleta no localStorage,
-  // atualiza a UI desta aba automaticamente
+  // atualiza a UI desta aba automaticamente (inclui gráfico de mercado)
   window.addEventListener('storage', e => {
-    if (e.key === STORAGE_KEY) refreshCurrent();
+    if (e.key !== STORAGE_KEY) return;
+    refreshCurrent();
+    // Se o dashboard estiver visível, atualiza o gráfico de mercado imediatamente
+    const sel = document.getElementById('marketFilter');
+    if (sel && !document.getElementById('sec-dashboard')?.classList.contains('hidden')) {
+      requestAnimationFrame(() => Charts.marketEvolution(activeBets(), sel.value));
+    }
   });
 
   lucide.createIcons();
