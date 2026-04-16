@@ -1878,30 +1878,58 @@ function _csvStatus(raw) {
   return 'pending'; // vazio ou não reconhecido
 }
 
+// ── Normaliza um header para comparação: uppercase, sem acentos, sem espaços ──
+function _normalizeHeader(h) {
+  return String(h || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toUpperCase()
+    .replace(/\s+/g, '');                              // remove espaços
+}
+
+// ── Mapeamento: campo interno → variações aceitas no header ──────────────────
+const CSV_COLUMN_MAP = {
+  date:     ['DATA'],
+  league:   ['LIGA', 'CAMPEONATO', 'COMPETICAO', 'COMPETITION'],
+  homeTeam: ['MANDANTE', 'TIMEMANDANTE', 'HOME', 'HOMETEAM', 'CASA'],
+  awayTeam: ['VISITANTE', 'TIMEVISITANTE', 'AWAY', 'AWAYTEAM', 'FORA'],
+  market:   ['MERCADO', 'MARKET', 'TIPO'],
+  odds:     ['ODD', 'ODDS', 'COTA'],
+  stake:    ['STAKE', 'UNIDADE', 'VALOR', 'APOSTA', 'UNIDADES'],
+  status:   ['STATUS', 'SITUACAO', 'RESULTADO'],
+  profit:   ['RETORNO', 'PROFIT', 'LUCRO'],
+};
+
+// ── Lê a linha de headers e devolve { campo: índice } ────────────────────────
+function _buildColumnIndex(headerRow) {
+  const normalized = headerRow.map(_normalizeHeader);
+  const idx = {};
+  for (const [field, aliases] of Object.entries(CSV_COLUMN_MAP)) {
+    const col = normalized.findIndex(h => aliases.includes(h));
+    if (col !== -1) idx[field] = col;
+  }
+  return idx;
+}
+
 function handleCSVImport(e) {
   const file = e.target.files[0];
   if (!file) return;
 
-  const ext    = file.name.split('.').pop().toLowerCase();
+  const ext     = file.name.split('.').pop().toLowerCase();
   const isExcel = ext === 'xls' || ext === 'xlsx';
-  const reader = new FileReader();
+  const reader  = new FileReader();
 
   reader.onload = ev => {
-    let rows = []; // array de arrays de strings (sem cabeçalho)
+    let allRows = []; // inclui linha de header na posição 0
 
     try {
       if (isExcel) {
-        // ── XLS / XLSX via SheetJS ─────────────────────────────
         if (!window.XLSX) throw new Error('SheetJS não carregou. Recarregue a página.');
-        const wb   = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
-        const ws   = wb.Sheets[wb.SheetNames[0]];
-        // raw:false → datas como string, números como string
-        const all  = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'DD/MM/YYYY' });
-        rows = all.slice(1).filter(r => r.some(c => String(c || '').trim()));
+        const wb  = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        allRows   = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'DD/MM/YYYY' });
       } else {
-        // ── CSV / TXT ──────────────────────────────────────────
         const lines = ev.target.result.split(/\r?\n/).filter(l => l.trim());
-        rows = lines.slice(1).map(l => l.split(';').map(v => v.trim()));
+        allRows     = lines.map(l => l.split(';').map(v => v.trim()));
       }
     } catch (err) {
       toast(`Erro ao ler arquivo: ${err.message}`, 'error');
@@ -1909,40 +1937,49 @@ function handleCSVImport(e) {
       return;
     }
 
-    if (!rows.length) {
+    if (allRows.length < 2) {
       toast('Arquivo sem dados. Verifique se há linhas abaixo do cabeçalho.', 'error');
       e.target.value = '';
       return;
     }
 
-    let successCount = 0;
-    const failedLines = [];
-    const newBets     = [];
+    // Monta índice dinâmico a partir dos headers reais do arquivo
+    const colIdx = _buildColumnIndex(allRows[0]);
 
-    rows.forEach((c, idx) => {
-      const lineNum = idx + 2; // +2: base-1 + offset do cabeçalho
+    // Valida campos obrigatórios
+    const missing = ['date', 'odds', 'stake', 'status'].filter(f => !(f in colIdx));
+    if (missing.length) {
+      toast(`Colunas obrigatórias não encontradas: ${missing.join(', ')}.\nVerifique os headers da planilha.`, 'error');
+      e.target.value = '';
+      return;
+    }
 
+    const dataRows    = allRows.slice(1).filter(r => r.some(c => String(c || '').trim()));
+    let   successCount = 0;
+    const failedLines  = [];
+    const newBets      = [];
+
+    const col = (row, field) => String(row[colIdx[field]] ?? '').trim();
+
+    dataRows.forEach((row, idx) => {
+      const lineNum = idx + 2;
       try {
-        if (c.length < 9) {
-          throw new Error(`apenas ${c.length} coluna(s) — esperado mín. 9`);
-        }
-
-        const date     = _csvDate(String(c[0] ?? ''));
-        const league   = String(c[1] ?? '').trim();
-        const homeTeam = String(c[2] ?? '').trim() || 'N/A';
-        const awayTeam = String(c[3] ?? '').trim() || 'N/A';
-        const market   = String(c[4] ?? '').trim();
-        const stake    = _csvNum(c[5]);
-        const odds     = _csvNum(c[6]);
-        // c[7] = Tipo → ignorado
-        const status   = _csvStatus(String(c[8] ?? ''));
-        const rawProfit = String(c[9] ?? '').trim();
+        const date     = _csvDate(col(row, 'date'));
+        const league   = col(row, 'league');
+        const homeTeam = col(row, 'homeTeam') || 'N/A';
+        const awayTeam = col(row, 'awayTeam') || 'N/A';
+        const market   = col(row, 'market');
+        const odds     = _csvNum(col(row, 'odds'));
+        const stake    = _csvNum(col(row, 'stake'));
+        const status   = _csvStatus(col(row, 'status'));
+        const rawProfit = col(row, 'profit');
         const profit   = rawProfit !== ''
           ? _csvNum(rawProfit)
           : Calc.betProfit({ odds, stake, status });
 
-        if (!date)    throw new Error(`data inválida: "${c[0]}"`);
-        if (odds < 1) throw new Error(`odd inválida: "${c[6]}"`);
+        if (!date)    throw new Error(`data inválida: "${col(row, 'date')}"`);
+        if (odds < 1) throw new Error(`odd inválida: "${col(row, 'odds')}" — verifique se as colunas ODD e STAKE não estão invertidas`);
+        if (stake <= 0) throw new Error(`stake inválido: "${col(row, 'stake')}"`);
 
         newBets.push({
           id: crypto.randomUUID(),
@@ -1962,13 +1999,9 @@ function handleCSVImport(e) {
       return;
     }
 
-    // Persiste sem sobrescrever dados existentes
     DB.saveBets([...DB.getBets(), ...newBets]);
-
-    // Sincroniza com Supabase (fire-and-forget)
     newBets.forEach(bet => saveBetToCloud(bet));
 
-    // Feedback detalhado
     let msg = `✅ Importação concluída!\n\n  ${successCount} aposta(s) importada(s).`;
     if (failedLines.length) {
       msg += `\n\n⚠️ ${failedLines.length} linha(s) ignorada(s):\n`
@@ -1981,7 +2014,6 @@ function handleCSVImport(e) {
     refreshCurrent();
   };
 
-  // XLS/XLSX precisa de ArrayBuffer; CSV lê como texto
   if (isExcel) reader.readAsArrayBuffer(file);
   else         reader.readAsText(file, 'UTF-8');
 }
