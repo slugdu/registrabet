@@ -257,6 +257,110 @@ async function handleSignOut() {
   // onAuthStateChange('SIGNED_OUT') cuida do restante
 }
 
+// ---- Navegação entre formulários de auth ----
+
+function showLoginForm() {
+  document.getElementById('form-login')?.classList.remove('hidden');
+  document.getElementById('form-forgot')?.classList.add('hidden');
+  document.getElementById('form-signup')?.classList.add('hidden');
+  document.getElementById('form-reset')?.classList.add('hidden');
+  document.getElementById('tab-login')?.classList.add('active');
+  document.getElementById('tab-signup')?.classList.remove('active');
+  clearAuthMessage();
+}
+
+function showForgotForm() {
+  document.getElementById('form-login')?.classList.add('hidden');
+  document.getElementById('form-forgot')?.classList.remove('hidden');
+  document.getElementById('form-signup')?.classList.add('hidden');
+  document.getElementById('form-reset')?.classList.add('hidden');
+  clearAuthMessage();
+}
+
+function showResetForm() {
+  document.getElementById('form-login')?.classList.add('hidden');
+  document.getElementById('form-forgot')?.classList.add('hidden');
+  document.getElementById('form-signup')?.classList.add('hidden');
+  document.getElementById('form-reset')?.classList.remove('hidden');
+  // Esconde as tabs — irrelevante no modo recovery
+  document.querySelector('.flex.bg-slate-900\\/80')?.classList.add('hidden');
+  clearAuthMessage();
+}
+
+// ---- Esqueci minha senha ----
+
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  clearAuthMessage();
+  const email = document.getElementById('forgot-email').value.trim();
+  setAuthBtnLoading('btn-forgot', true, 'Enviar link');
+
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+
+  setAuthBtnLoading('btn-forgot', false, 'Enviar link');
+
+  if (error) {
+    showAuthMessage(error.message, 'error');
+  } else {
+    showAuthMessage('✉️ Link enviado! Verifique seu email.', 'success');
+  }
+}
+
+// ---- Redefinir senha (modo recovery) ----
+
+async function handleResetPassword(e) {
+  e.preventDefault();
+  clearAuthMessage();
+
+  const newPass     = document.getElementById('reset-password').value;
+  const confirmPass = document.getElementById('reset-password-confirm').value;
+
+  if (newPass.length < 6) {
+    showAuthMessage('A senha deve ter pelo menos 6 caracteres.', 'error');
+    return;
+  }
+  if (newPass !== confirmPass) {
+    showAuthMessage('As senhas não coincidem.', 'error');
+    return;
+  }
+
+  setAuthBtnLoading('btn-reset', true, 'Salvar nova senha');
+
+  const { error } = await supabaseClient.auth.updateUser({ password: newPass });
+
+  setAuthBtnLoading('btn-reset', false, 'Salvar nova senha');
+
+  if (error) {
+    showAuthMessage(error.message, 'error');
+  } else {
+    showAuthMessage('✅ Senha atualizada! Redirecionando...', 'success');
+    setTimeout(() => {
+      // Limpa o hash de recovery da URL e recarrega para o estado de login limpo
+      window.location.replace(window.location.pathname);
+    }, 1500);
+  }
+}
+
+// ---- Detecção de modo recovery na URL ----
+// Supabase insere #type=recovery&access_token=... na URL após o clique no link.
+// Precisa ser verificado logo no carregamento, antes do onAuthStateChange.
+
+function checkRecoveryMode() {
+  const hash   = window.location.hash;
+  const params = new URLSearchParams(hash.replace('#', '?'));
+  if (params.get('type') === 'recovery') {
+    // Garante que a tela de auth está visível e exibe o form de nova senha
+    showAuthScreen();
+    hideSplash();
+    showResetForm();
+    showAuthMessage('Digite sua nova senha abaixo.', 'info');
+    return true;
+  }
+  return false;
+}
+
 // ---- Migração silenciosa de dados locais ----
 
 async function checkMigration(userId) {
@@ -478,6 +582,9 @@ async function _bootUser(user) {
 // ---- Inicialização da camada de auth ----
 
 function initAuth() {
+  // Detecta link de recovery ANTES do listener — exibe form de nova senha imediatamente
+  if (checkRecoveryMode()) return;
+
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     console.log('[Auth]', event, session?.user?.email ?? '—');
 
@@ -787,10 +894,15 @@ const Calc = {
       .filter(b => b.status !== 'pending')
       .sort((a, b) => new Date(a.date) - new Date(b.date));
     let cum = 0;
-    const points = [{ label: 'Início', value: 0 }];
+    const points = [{ label: 'Início', value: 0, date: null, bet: null }];
     sorted.forEach((bet, i) => {
       cum = +(cum + (bet.profit || 0)).toFixed(2);
-      points.push({ label: `#${i + 1} ${getEventDisplay(bet)}`, value: cum, date: bet.date });
+      points.push({
+        label:  `#${i + 1} ${getEventDisplay(bet)}`,
+        value:  cum,
+        date:   bet.date,
+        bet:    bet   // referência completa para tooltips ricos
+      });
     });
     return points;
   },
@@ -1257,7 +1369,28 @@ const Charts = {
         ...d,
         plugins: {
           ...d.plugins,
-          tooltip: { ...d.plugins.tooltip, callbacks: { label: ctx => `Profit: ${fmtProfit(ctx.parsed.y)}` } }
+          tooltip: {
+            ...d.plugins.tooltip,
+            callbacks: {
+              title(items) {
+                const pt = data[items[0].dataIndex];
+                if (!pt?.date) return 'Início';
+                // Formata YYYY-MM-DD → DD/MM/YYYY
+                const [y, m, day] = pt.date.split('-');
+                return `${day}/${m}/${y}`;
+              },
+              label(ctx) {
+                const pt    = data[ctx.dataIndex];
+                const lines = [`  Lucro acumulado: ${fmtProfit(ctx.parsed.y)}`];
+                if (pt?.bet) {
+                  const game = getEventDisplay(pt.bet);
+                  if (game && game !== '—') lines.push(`  Jogo: ${game}`);
+                  if (pt.bet.market)        lines.push(`  Mercado: ${pt.bet.market}`);
+                }
+                return lines;
+              }
+            }
+          }
         },
         scales: {
           x: { display: false },

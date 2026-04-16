@@ -84,6 +84,47 @@
             class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors mt-1">
             Entrar
           </button>
+          <button type="button" onclick="showForgotForm()"
+            class="w-full text-center text-xs text-slate-600 hover:text-slate-400 transition-colors pt-1">
+            Esqueci minha senha
+          </button>
+        </form>
+
+        <!-- ── Formulário Esqueci Senha ── -->
+        <form id="form-forgot" class="hidden space-y-3" onsubmit="handleForgotPassword(event)">
+          <p class="text-xs text-slate-500 mb-1">Enviaremos um link de redefinição para o seu email.</p>
+          <div>
+            <label class="form-label" for="forgot-email">Email</label>
+            <input id="forgot-email" type="email" required autocomplete="email"
+              placeholder="seu@email.com" class="form-input">
+          </div>
+          <button id="btn-forgot" type="submit"
+            class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors mt-1">
+            Enviar link
+          </button>
+          <button type="button" onclick="showLoginForm()"
+            class="w-full text-center text-xs text-slate-600 hover:text-slate-400 transition-colors pt-1">
+            ← Voltar para o login
+          </button>
+        </form>
+
+        <!-- ── Formulário Nova Senha (modo recovery) ── -->
+        <form id="form-reset" class="hidden space-y-3" onsubmit="handleResetPassword(event)">
+          <p class="text-xs text-slate-500 mb-1">Crie uma nova senha para sua conta.</p>
+          <div>
+            <label class="form-label" for="reset-password">Nova senha</label>
+            <input id="reset-password" type="password" required autocomplete="new-password"
+              placeholder="mínimo 6 caracteres" class="form-input">
+          </div>
+          <div>
+            <label class="form-label" for="reset-password-confirm">Confirmar senha</label>
+            <input id="reset-password-confirm" type="password" required autocomplete="new-password"
+              placeholder="repita a senha" class="form-input">
+          </div>
+          <button id="btn-reset" type="submit"
+            class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors mt-1">
+            Salvar nova senha
+          </button>
         </form>
 
         <!-- ── Formulário de Cadastro ── -->
