@@ -1543,6 +1543,194 @@ let sortDir        = 'desc';
 let monthFilter    = '';
 
 // ============================================================
+// MÓDULO: RELATÓRIO MENSAL
+// ============================================================
+
+const MonthlyReport = {
+
+  // Normaliza YYYY-MM-DD ou DD/MM/YYYY → 'YYYY-MM' para agrupamento
+  _monthKey(dateStr) {
+    if (!dateStr) return null;
+    const s = String(dateStr).trim();
+    // DD/MM/YYYY
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+      const [, m, y] = s.split('/');
+      return `${y}-${m}`;
+    }
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+    return null;
+  },
+
+  // Normaliza qualquer formato de data para 'YYYY-MM-DD' (sem shift de timezone)
+  _toISODate(dateStr) {
+    if (!dateStr) return null;
+    const s = String(dateStr).trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+      const [d, m, y] = s.split('/');
+      return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    }
+    return s.slice(0, 10);
+  },
+
+  // Fonte de dados: prioriza DB.getBets(), fallback para localStorage direto
+  _getBets() {
+    if (typeof DB !== 'undefined') return DB.getBets();
+    try {
+      const uid = typeof currentUser !== 'undefined' ? currentUser?.id : null;
+      return JSON.parse(localStorage.getItem(uid ? `bets_${uid}` : 'bettrack_v1') || '[]');
+    } catch { return []; }
+  },
+
+  // Extrai meses únicos das apostas — ordenados do mais recente ao mais antigo
+  getMonths(bets) {
+    const keys = [...new Set(
+      bets.map(b => this._monthKey(b.date)).filter(Boolean)
+    )];
+    return keys.sort((a, b) => b.localeCompare(a));
+  },
+
+  // Processa apostas de um mês: retorna { summary, days[] }
+  process(bets, monthKey) {
+    const inMonth = bets.filter(b => this._monthKey(b.date) === monthKey);
+
+    const summary = inMonth.reduce((acc, b) => {
+      acc.count  += 1;
+      acc.profit += parseFloat(b.profit) || 0;
+      acc.stake  += parseFloat(b.stake)  || 0;
+      return acc;
+    }, { count: 0, profit: 0, stake: 0 });
+
+    summary.profit = +summary.profit.toFixed(2);
+    summary.stake  = +summary.stake.toFixed(2);
+    summary.roi    = summary.stake > 0
+      ? +((summary.profit / summary.stake) * 100).toFixed(1)
+      : 0;
+
+    // Agrupa por dia
+    const dayMap = {};
+    inMonth.forEach(b => {
+      const key = this._toISODate(b.date);
+      if (!key) return;
+      if (!dayMap[key]) dayMap[key] = { date: key, count: 0, profit: 0, stake: 0 };
+      dayMap[key].count  += 1;
+      dayMap[key].profit += parseFloat(b.profit) || 0;
+      dayMap[key].stake  += parseFloat(b.stake)  || 0;
+    });
+
+    const days = Object.values(dayMap)
+      .map(d => ({
+        ...d,
+        profit: +d.profit.toFixed(2),
+        stake:  +d.stake.toFixed(2),
+        roi:    d.stake > 0 ? +((d.profit / d.stake) * 100).toFixed(1) : 0
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date)); // mais recente primeiro
+
+    return { summary, days };
+  },
+
+  // Renderiza cards de resumo
+  _renderCards(summary) {
+    const el = document.getElementById('monthly-report-cards');
+    if (!el) return;
+
+    const profitColor = summary.profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+    const roiColor    = summary.roi    >= 0 ? 'text-emerald-400' : 'text-red-400';
+
+    el.innerHTML = `
+      <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800/50">
+        <p class="text-[10px] font-semibold text-slate-600 uppercase tracking-wider mb-2">Apostas</p>
+        <p class="text-xl font-bold text-slate-200">${summary.count}</p>
+        <p class="text-[11px] text-slate-600 mt-1">no mês</p>
+      </div>
+      <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800/50">
+        <p class="text-[10px] font-semibold text-slate-600 uppercase tracking-wider mb-2">Lucro Total</p>
+        <p class="text-xl font-bold ${profitColor}">${fmtProfit(summary.profit)}</p>
+        <p class="text-[11px] text-slate-600 mt-1">apostado: ${fmtMoney(summary.stake)}</p>
+      </div>
+      <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800/50">
+        <p class="text-[10px] font-semibold text-slate-600 uppercase tracking-wider mb-2">ROI</p>
+        <p class="text-xl font-bold ${roiColor}">${summary.roi.toFixed(1)}%</p>
+        <p class="text-[11px] text-slate-600 mt-1">retorno sobre apostado</p>
+      </div>`;
+  },
+
+  // Renderiza tabela diária
+  _renderTable(days) {
+    const tbody = document.getElementById('monthly-report-body');
+    if (!tbody) return;
+
+    if (!days.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="5" class="px-4 py-8 text-center text-slate-600 text-sm">
+          Sem dados no período
+        </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = days.map(d => {
+      const profitCls = d.profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const roiCls    = d.roi    >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const [y, m, day] = d.date.split('-');
+      const dateFmt   = `${day}/${m}/${y}`;
+
+      return `<tr class="hover:bg-slate-800/30 transition-colors">
+        <td class="px-4 py-2.5 text-xs text-slate-400 font-mono">${dateFmt}</td>
+        <td class="px-4 py-2.5 text-center text-xs text-slate-400">${d.count}</td>
+        <td class="px-4 py-2.5 text-right text-xs font-mono text-slate-400">${fmtMoney(d.stake)}</td>
+        <td class="px-4 py-2.5 text-right text-xs font-mono font-semibold ${profitCls}">${fmtProfit(d.profit)}</td>
+        <td class="px-4 py-2.5 text-right text-xs font-mono ${roiCls}">${d.roi.toFixed(1)}%</td>
+      </tr>`;
+    }).join('');
+  },
+
+  // Popula o select com os meses disponíveis
+  _populateSelect(months, selectedMonth) {
+    const sel = document.getElementById('monthly-report-select');
+    if (!sel) return;
+    if (!months.length) {
+      sel.innerHTML = '<option value="">Sem dados</option>';
+      return;
+    }
+    const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    sel.innerHTML = months.map(mk => {
+      const [y, m] = mk.split('-');
+      const label  = `${names[parseInt(m, 10) - 1]} ${y}`;
+      return `<option value="${mk}"${mk === selectedMonth ? ' selected' : ''}>${label}</option>`;
+    }).join('');
+  },
+
+  // Ponto de entrada: renderiza o módulo completo
+  render(preselectedMonth) {
+    const bets   = this._getBets();
+    const months = this.getMonths(bets);
+    const target = preselectedMonth && months.includes(preselectedMonth)
+      ? preselectedMonth
+      : (months[0] ?? null);
+
+    this._populateSelect(months, target);
+
+    if (!target) {
+      document.getElementById('monthly-report-cards').innerHTML =
+        '<p class="col-span-3 text-slate-600 text-sm text-center py-4">Sem dados disponíveis.</p>';
+      document.getElementById('monthly-report-body').innerHTML =
+        '<tr><td colspan="5" class="px-4 py-8 text-center text-slate-600 text-sm">Sem dados no período</td></tr>';
+      return;
+    }
+
+    const { summary, days } = this.process(bets, target);
+    this._renderCards(summary);
+    this._renderTable(days);
+  }
+};
+
+// Chamada pelo onchange do select#monthly-report-select
+function renderMonthlyReport(monthKey) {
+  MonthlyReport.render(monthKey);
+}
+
+// ============================================================
 // RENDER: DASHBOARD
 // ============================================================
 
@@ -1612,6 +1800,9 @@ function renderDashboard() {
     // Renderiza o gráfico respeitando o mercado selecionado (ou todos)
     Charts.marketEvolution(bets, sel?.value ?? '');
     Charts.drawdown(bets);
+    // Relatório mensal: preserva mês selecionado ao re-renderizar
+    const monthlySel = document.getElementById('monthly-report-select');
+    MonthlyReport.render(monthlySel?.value || undefined);
     lucide.createIcons();
   });
 }
