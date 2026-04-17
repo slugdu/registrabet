@@ -2230,7 +2230,7 @@ function exportData() {
   const blob = new Blob([JSON.stringify(bets, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = `registrabet_${new Date().toISOString().slice(0, 10)}.json`;
+  a.href = url; a.download = `registraai_${new Date().toISOString().slice(0, 10)}.json`;
   a.click(); URL.revokeObjectURL(url);
   toast(`${bets.length} apostas exportadas!`, 'success');
 }
@@ -2257,7 +2257,7 @@ function handleImport(e) {
       DB.saveBets(merged);
       toast(`${added} aposta(s) importada(s)!`, 'success');
       refreshCurrent();
-    } catch { toast('Arquivo inválido. Use um JSON exportado pelo Registrabet.', 'error'); }
+    } catch { toast('Arquivo inválido. Use um JSON exportado pelo RegistraAi.', 'error'); }
   };
   reader.readAsText(file);
   e.target.value = '';
@@ -2501,7 +2501,7 @@ function exportPDF() {
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:36px;padding-bottom:24px;border-bottom:2px solid #1e3a5f">
       <div style="width:42px;height:42px;background:linear-gradient(135deg,#059669,#047857);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(5,150,105,0.3)">📈</div>
       <div>
-        <h1 style="font-size:22px;font-weight:800;margin:0;color:#f1f5f9;letter-spacing:-0.02em">Registrabet</h1>
+        <h1 style="font-size:22px;font-weight:800;margin:0;color:#f1f5f9;letter-spacing:-0.02em">RegistraAi</h1>
         <p style="font-size:11px;color:#475569;margin:3px 0 0">Relatório de Performance · ${period} · Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
       </div>
     </div>
@@ -2546,7 +2546,7 @@ function exportPDF() {
       <p style="font-size:13px;color:#cbd5e1;margin:0;line-height:1.6">${conclusion}</p>
     </div>
 
-    <p style="margin-top:24px;font-size:10px;color:#1e3a5f;text-align:center">Registrabet · Gestão Profissional de Apostas · Dados armazenados localmente</p>`;
+    <p style="margin-top:24px;font-size:10px;color:#1e3a5f;text-align:center">RegistraAi · Gestão Profissional de Apostas · Dados armazenados localmente</p>`;
 
   document.body.appendChild(el);
 
@@ -2558,7 +2558,7 @@ function exportPDF() {
   html2pdf()
     .set({
       margin: 0,
-      filename: `Registrabet_Relatorio_${new Date().toISOString().slice(0,10)}.pdf`,
+      filename: `RegistraAi_Relatorio_${new Date().toISOString().slice(0,10)}.pdf`,
       image: { type: 'jpeg', quality: 0.95 },
       html2canvas: { scale: 2, backgroundColor: '#060d1a', useCORS: true },
       jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
