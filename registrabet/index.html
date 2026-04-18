@@ -59,11 +59,6 @@
 
       <!-- Card -->
       <div class="card p-7">
-        <!-- Tabs -->
-        <div class="flex bg-slate-900/80 rounded-xl p-1 mb-6 gap-1">
-          <button id="tab-login"  class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
-          <button id="tab-signup" class="auth-tab"        onclick="switchAuthTab('signup')">Criar conta</button>
-        </div>
 
         <!-- Mensagem de erro / sucesso -->
         <div id="auth-error" class="hidden mb-4 px-4 py-3 rounded-xl text-sm text-center"></div>
@@ -127,23 +122,6 @@
           </button>
         </form>
 
-        <!-- ── Formulário de Cadastro ── -->
-        <form id="form-signup" class="hidden space-y-3" onsubmit="handleSignUp(event)">
-          <div>
-            <label class="form-label" for="auth-email-signup">Email</label>
-            <input id="auth-email-signup" type="email" required autocomplete="email"
-              placeholder="seu@email.com" class="form-input">
-          </div>
-          <div>
-            <label class="form-label" for="auth-password-signup">Senha</label>
-            <input id="auth-password-signup" type="password" required autocomplete="new-password"
-              placeholder="mínimo 6 caracteres" class="form-input">
-          </div>
-          <button id="btn-signup" type="submit"
-            class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors mt-1">
-            Criar conta
-          </button>
-        </form>
       </div>
 
       <p class="text-center text-xs text-slate-800 mt-6">
